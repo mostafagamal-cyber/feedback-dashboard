@@ -47,6 +47,8 @@ const DATE_COL: Record<string, string> = {
   // v59: per-event tables (Base / Extras Final from the Google Sheet).
   base_events: "review_date",
   extras_events: "review_date",
+  // v59: Live vs Offline comparison.
+  live_vs_offline: "match_date",
 };
 
 // Whether the table supports a "module" column filter.
@@ -57,6 +59,7 @@ const MODULE_COL: Record<string, string | null> = {
   weekly_quality_scores: null,
   base_events: null,
   extras_events: null,
+  live_vs_offline: null,
 };
 
 export async function POST(req: NextRequest) {

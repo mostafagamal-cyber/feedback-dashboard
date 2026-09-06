@@ -75,6 +75,8 @@ function buildNav(role: AppRole): NavEntry[] {
   if (role === "Admin") uploadItems.push({ href: "/module-upload", label: "Module Data" });
   // v59: Base/Extras Final per-event upload (Admin-only).
   if (role === "Admin") uploadItems.push({ href: "/events-upload", label: "Event Details (Base/Extras)" });
+  // v59: Live vs. Offline per-event comparison (Admin-only).
+  if (role === "Admin") uploadItems.push({ href: "/live-vs-offline-upload", label: "Live vs. Offline" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/quality-upload", label: "Quality Score Upload" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/weekly-quality-upload", label: "Weekly Quality Score Upload" });
   if (role === "Admin" || role === "Reviewer") uploadItems.push({ href: "/upload", label: "Send Report" });

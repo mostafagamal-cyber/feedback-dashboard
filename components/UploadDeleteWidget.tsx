@@ -8,7 +8,8 @@ type Target =
   | "freeze_frame_scores"
   | "weekly_quality_scores"
   | "base_events"
-  | "extras_events";
+  | "extras_events"
+  | "live_vs_offline";
 
 type Mode = "date" | "month" | "range";
 
