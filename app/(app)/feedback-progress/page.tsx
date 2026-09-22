@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getEffective } from "@/lib/effective";
 import FeedbackProgress, { type Session } from "@/components/FeedbackProgress";
 
+
 export const dynamic = "force-dynamic";
 
 export default async function FeedbackProgressPage() {
@@ -14,7 +15,8 @@ export default async function FeedbackProgressPage() {
 
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
-  const role = (profile?.role ?? "Viewer") as "Admin" | "Reviewer" | "Viewer";
+  const role = (profile?.role ?? "Viewer") as string;
+  const isAdmin = role === "Admin";
   if (role === "Viewer") redirect("/analytics");
 
   const { data: reservations } = await supabase
@@ -57,5 +59,5 @@ export default async function FeedbackProgressPage() {
     })),
   }));
 
-  return <FeedbackProgress initial={sessions} />;
+  return <FeedbackProgress initial={sessions} isAdmin={isAdmin} />;
 }

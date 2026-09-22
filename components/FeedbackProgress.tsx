@@ -45,7 +45,13 @@ function isoDate(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-export default function FeedbackProgress({ initial }: { initial: Session[] }) {
+export default function FeedbackProgress({
+  initial,
+  isAdmin = false,
+}: {
+  initial: Session[];
+  isAdmin?: boolean;
+}) {
   const supabase = createClient();
   const [sessions, setSessions] = useState<Session[]>(initial);
   // v59: multi-select filters. Empty arrays = "all".
@@ -91,6 +97,61 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+
+  // Admin: edit session date/time/topic
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{
+    session_date: string;
+    session_time: string;
+    topic: string;
+  }>({ session_date: "", session_time: "", topic: "" });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editMsg, setEditMsg] = useState<string | null>(null);
+
+  function openEdit(s: Session) {
+    setEditingId(s.id);
+    setEditDraft({
+      session_date: s.session_date ?? "",
+      session_time: s.session_time ?? "",
+      topic: s.topic ?? "",
+    });
+    setEditMsg(null);
+  }
+
+  async function saveSession() {
+    if (!editingId) return;
+    setEditSaving(true);
+    setEditMsg(null);
+    const res = await fetch(`/api/admin/feedback-reservation/${editingId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_date: editDraft.session_date,
+        session_time: editDraft.session_time,
+        topic: editDraft.topic,
+      }),
+    });
+    const json = await res.json();
+    setEditSaving(false);
+    if (!res.ok) {
+      setEditMsg(json.error ?? "Error saving");
+      return;
+    }
+    // update local state
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id !== editingId
+          ? s
+          : {
+              ...s,
+              session_date: editDraft.session_date || s.session_date,
+              session_time: editDraft.session_time || null,
+              topic: editDraft.topic || null,
+            }
+      )
+    );
+    setEditingId(null);
+  }
 
   function editAttendee(sid: string, aid: string, patch: Partial<Attendee>) {
     setSessions((p) =>
@@ -345,6 +406,20 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
           {visible.map((s) => (
             <div key={s.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
               <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                {/* Admin edit button */}
+                {isAdmin && editingId !== s.id && (
+                  <button
+                    type="button"
+                    onClick={() => openEdit(s)}
+                    title="Edit session"
+                    className="ml-auto rounded-lg border border-slate-200 dark:border-slate-700 p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    {/* pencil icon */}
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                    </svg>
+                  </button>
+                )}
                 <span className="font-semibold text-slate-800 dark:text-slate-100">{s.session_date}</span>
                 {s.session_time && <span className="text-slate-500 dark:text-slate-400">{s.session_time}</span>}
                 {s.shift && (
@@ -386,6 +461,61 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                   </span>
                 )}
               </div>
+
+              {/* Admin inline edit form */}
+              {isAdmin && editingId === s.id && (
+                <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">Edit session</p>
+                  <div className="flex flex-wrap gap-3 items-end">
+                    <div>
+                      <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Date</label>
+                      <input
+                        type="date"
+                        value={editDraft.session_date}
+                        onChange={(e) => setEditDraft((d) => ({ ...d, session_date: e.target.value }))}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Time</label>
+                      <input
+                        type="time"
+                        value={editDraft.session_time}
+                        onChange={(e) => setEditDraft((d) => ({ ...d, session_time: e.target.value }))}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-[220px]">
+                      <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Topic</label>
+                      <input
+                        type="text"
+                        value={editDraft.topic}
+                        onChange={(e) => setEditDraft((d) => ({ ...d, topic: e.target.value }))}
+                        placeholder="e.g. Freeze frame mistakes"
+                        className={`${inputCls} w-full`}
+                      />
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <button
+                        type="button"
+                        onClick={saveSession}
+                        disabled={editSaving}
+                        className="rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-4 py-2 text-sm font-medium disabled:opacity-50"
+                      >
+                        {editSaving ? "Saving..." : "Save"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setEditingId(null); setEditMsg(null); }}
+                        className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                  {editMsg && <p className="mt-2 text-xs text-red-600">{editMsg}</p>}
+                </div>
+              )}
 
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
