@@ -15,6 +15,49 @@
 //   NEXT_PUBLIC_APP_URL    - public app URL used in the footer / CTA fallback
 
 import nodemailer from "nodemailer";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
+
+// v59: auto-CC the team leader (users.role='TeamLeader' on the same squad)
+// on any transactional email addressed to a collector. Resolved via the
+// service-role client so RLS doesn't get in the way. Set EMAIL_CC_TEAMLEADER=0
+// to disable.
+async function resolveTeamLeaderCcs(toAddresses: string[]): Promise<string[]> {
+  if (process.env.EMAIL_CC_TEAMLEADER === "0") return [];
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return [];
+  try {
+    const a = createAdminClient(url, key, { auth: { persistSession: false } });
+    const lowered = toAddresses.map((e) => e.trim().toLowerCase()).filter(Boolean);
+    if (lowered.length === 0) return [];
+    // Pull the squad(s) of the recipient(s).
+    const { data: rcpts } = await a
+      .from("users")
+      .select("email, squad")
+      .in("email", lowered);
+    const squads = Array.from(
+      new Set((rcpts ?? []).map((r: any) => (r?.squad ?? "").trim()).filter(Boolean))
+    );
+    if (squads.length === 0) return [];
+    // Team leaders on those squads.
+    const { data: leaders } = await a
+      .from("users")
+      .select("email, squad, role")
+      .in("squad", squads)
+      .eq("role", "TeamLeader");
+    const ccs = Array.from(
+      new Set(
+        (leaders ?? [])
+          .map((l: any) => String(l.email ?? "").trim())
+          .filter((e: string) => e && !lowered.includes(e.toLowerCase()))
+      )
+    );
+    return ccs;
+  } catch (e: any) {
+    console.warn("[email] team-leader CC lookup failed:", e?.message ?? e);
+    return [];
+  }
+}
 
 const DASHBOARD_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "https://feedback-dashboard-7i8h.vercel.app";
@@ -27,6 +70,13 @@ export type SendEmailParams = {
    * Optional plain-text version. If omitted, one is generated from the HTML.
    */
   text?: string;
+  /**
+   * Explicit extra CC addresses. Merged with the auto-resolved team leaders
+   * (unless you set autoCcTeamLeader=false).
+   */
+  cc?: string | string[];
+  /** Set to false to skip the auto team-leader CC for this send. */
+  autoCcTeamLeader?: boolean;
 };
 
 /**
@@ -46,6 +96,8 @@ export async function sendEmail({
   subject,
   html,
   text,
+  cc,
+  autoCcTeamLeader = true,
 }: SendEmailParams): Promise<boolean> {
   const user = process.env.GMAIL_USER;
   const pass = process.env.GMAIL_APP_PASSWORD;
@@ -60,6 +112,19 @@ export async function sendEmail({
 
   const plain = (text ?? htmlToText(html)).trim();
 
+  // Merge caller-supplied CC with auto team-leader CC. `to` can be a comma-
+  // separated list; we split so the lookup covers every recipient.
+  const explicitCc = Array.isArray(cc) ? cc : cc ? [cc] : [];
+  const toList = String(to).split(",").map((s) => s.trim()).filter(Boolean);
+  const autoCc = autoCcTeamLeader ? await resolveTeamLeaderCcs(toList) : [];
+  const ccMerged = Array.from(
+    new Set(
+      [...explicitCc, ...autoCc]
+        .map((s) => s.trim())
+        .filter((s) => s && !toList.map((t) => t.toLowerCase()).includes(s.toLowerCase()))
+    )
+  );
+
   try {
     const transporter = nodemailer.createTransport({
       service: "gmail",
@@ -68,6 +133,7 @@ export async function sendEmail({
     await transporter.sendMail({
       from,
       to,
+      cc: ccMerged.length > 0 ? ccMerged.join(",") : undefined,
       replyTo,
       subject,
       html,
