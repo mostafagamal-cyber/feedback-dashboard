@@ -108,6 +108,10 @@ export default function FeedbackProgress({
   const [editSaving, setEditSaving] = useState(false);
   const [editMsg, setEditMsg] = useState<string | null>(null);
 
+  // Admin: delete session
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   function openEdit(s: Session) {
     setEditingId(s.id);
     setEditDraft({
@@ -151,6 +155,22 @@ export default function FeedbackProgress({
       )
     );
     setEditingId(null);
+  }
+
+  async function deleteSession(id: string) {
+    setDeleting(true);
+    const res = await fetch(`/api/admin/feedback-reservation/${id}`, {
+      method: "DELETE",
+    });
+    setDeleting(false);
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setEditMsg(json.error ?? "Error deleting session");
+      return;
+    }
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    setEditingId(null);
+    setConfirmDeleteId(null);
   }
 
   function editAttendee(sid: string, aid: string, patch: Partial<Attendee>) {
@@ -514,6 +534,40 @@ export default function FeedbackProgress({
                     </div>
                   </div>
                   {editMsg && <p className="mt-2 text-xs text-red-600">{editMsg}</p>}
+
+                  {/* Delete section */}
+                  <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                    {confirmDeleteId === s.id ? (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <p className="text-sm text-red-600 font-medium">
+                          Are you sure? A cancellation email will be sent to all attendees.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => deleteSession(s.id)}
+                          disabled={deleting}
+                          className="rounded-lg bg-red-600 text-white px-4 py-2 text-sm font-medium disabled:opacity-50 hover:bg-red-700"
+                        >
+                          {deleting ? "Deleting..." : "Yes, delete & notify"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(s.id)}
+                        className="rounded-lg border border-red-300 dark:border-red-800 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        Delete session
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
